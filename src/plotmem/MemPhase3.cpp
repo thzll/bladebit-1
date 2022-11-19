@@ -85,6 +85,12 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
 
     uint32* map = (uint32*)cx.metaBuffer1;
 
+    std::string sortFileName = ".phase3.table" + std::to_string((int)tableId);
+    if (cx.test){
+        saveHashToFile(sortFileName+".pruneLtableBegin", (char *) lEntries, rTableCount * sizeof(uint32));
+        saveHashToFile(sortFileName+".pruneMapBegin", (char *) map, rTableCount * sizeof(uint32));
+    }
+
     std::atomic<uint> threadSignal = 0;
     std::atomic<uint> releaseLock  = 0;
     
@@ -109,36 +115,61 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
     jobs[threadCount-1].length += trailingEntries;
 
     constexpr bool PruneTable = !IsTable6;
-    cx.threadPool->RunJob( ProcessTableThread<PruneTable>, jobs, threadCount );
-
-
-    // Get the new total length after the prune
-    uint64 newLength;
-    if constexpr ( !IsTable6 )
-    {
-        newLength = jobs[0].length;
-        
-        for( uint i = 1; i < threadCount; i++ )
-            newLength += jobs[i].length;
+    uint64 newLength;  //3429318340 0xcc673ec4
+    auto mapFileName = sortFileName + ".pruneMapEnd";
+    auto bufferFileName = sortFileName + ".lpBufferEnd";
+    if (cx.test && FileExists(mapFileName)&& FileExists(bufferFileName)){
+        auto readCount = rTableCount;
+        if (readCount==0){
+            readCount = 0x100000000;
+        }
+        readFromFile(sortFileName+".pruneMapEnd", (char *) map, readCount * sizeof(uint32));
+        auto rn = readFromFile(sortFileName+".lpBufferEnd", (char *) lpBuffer, readCount * sizeof(uint64));
+        newLength = rn / sizeof(uint64);
     }
     else
     {
-        // No prunning for table 6, so same length
-        newLength = rTableCount;
+        cx.threadPool->RunJob( ProcessTableThread<PruneTable>, jobs, threadCount );
+
+
+        //phase3.table0.pruneLtableEnd.hash.537599cb5fe34214fc7f3b8b413ad8d67c4f644a22a3d499a23537df9398c7aa
+        //phase3.table0.pruneMapEnd.hash.0df4fe9b36d7753461bd369a20c9591b6e4cfba1b5f55ec8d3b2e6d7222d58cd
+        // Get the new total length after the prune
+        // 获得修剪后的新总长度
+
+        if constexpr ( !IsTable6 )
+        {
+            newLength = jobs[0].length;
+
+            for( uint i = 1; i < threadCount; i++ )
+                newLength += jobs[i].length;
+        }
+        else
+        {
+            // No prunning for table 6, so same length
+            // 表6没有修剪，所以长度相同
+            newLength = rTableCount;
+        }
+        if (cx.test) {
+            saveToFile(sortFileName + ".pruneMapEnd", (char *) map, newLength * sizeof(uint32));
+            saveToFile(sortFileName + ".lpBufferEnd", (char *) lpBuffer, newLength * sizeof(uint64));
+        }
     }
-
-
     // Sort LinePoints, along with the map
     RadixSort256::SortWithKey<MAX_THREADS>( *cx.threadPool,
         lpBuffer, (uint64*)rTable,
         map,      map + newLength,  // This is meta1, so there's plenty of space to hold both buffers
         newLength );
-    
+    if (cx.test) {
+        saveToFile(sortFileName + ".EndLpBuffer", (char *) lpBuffer, newLength * sizeof(uint64));
+    }
 
     // Write lookup table (map it based on sort key)
     // After this step lEntries will contain the new index map into the LP's
     cx.threadPool->RunJob( WriteLookupTableThread, jobs, threadCount );
-
+    if (cx.test) {
+        saveToFile(sortFileName + ".lEntries", (char *) lEntries, rTableCount * 4);
+    }
 
     if constexpr ( IsTable6 )
     {
@@ -167,7 +198,9 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
     // #NOTE: For table 6: rTable is meta0 here.
     byte*  parkBuffer     = _context.plotWriter->AlignPointerToBlockSize<byte>( (void*)rTable );
     size_t sizeTableParks = WriteParks<MAX_THREADS>( *cx.threadPool, newLength, lpBuffer, parkBuffer, tableId );
-    
+    if (cx.test) {
+        saveToFile(sortFileName + ".parkBuffer", (char *) parkBuffer, sizeTableParks);
+    }
     // Send over the park for writing in the plot file in the background
     if( !cx.plotWriter->WriteTable( parkBuffer, sizeTableParks ) )
         Fatal( "Failed to write table %d to disk.", (int)tableId+1 );

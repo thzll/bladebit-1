@@ -21,6 +21,8 @@ struct PlotRequest
 ///
 struct MemPlotContext
 {
+    bool test;
+    std::string outPath;      // Output plot path
     // They id of the plot being plotted
     const byte* plotId;
 

@@ -90,7 +90,8 @@ void PlotTools::GeneratePlotIdAndMemo(
 {
     // Generate random master secret key
     byte seed[32];
-    SysHost::Random( seed, sizeof( seed ) );
+    memset(seed, 0, 32);
+  //  SysHost::Random( seed, sizeof( seed ) );
 
     bls::PrivateKey sk      = bls::AugSchemeMPL().KeyGen( bls::Bytes( seed, sizeof( seed ) ) );
     bls::G1Element  localPk = std::move( KeyTools::MasterSkToLocalSK( sk ) ).GetG1Element();

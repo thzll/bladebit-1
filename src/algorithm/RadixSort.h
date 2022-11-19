@@ -1,5 +1,6 @@
 #pragma once
 #include "threading/ThreadPool.h"
+#include "disk/disk.h"
 #include <cstring>
 
 class RadixSort256

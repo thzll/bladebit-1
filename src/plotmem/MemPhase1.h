@@ -66,4 +66,5 @@ private:
 
 private:
     MemPlotContext& _context;
+    int ComputeSingleTableRead;
 };

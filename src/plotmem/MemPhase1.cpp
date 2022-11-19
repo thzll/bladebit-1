@@ -5,6 +5,7 @@
 #include "util/Log.h"
 #include "FxSort.h"
 #include "algorithm/YSort.h"
+#include "disk/disk.h"
 #include "SysHost.h"
 #include <cmath>
 
@@ -194,7 +195,16 @@ uint64 MemPhase1::GenerateF1()
     const uint64 trailingBlocks     = CDiv( trailingEntries, entriesPerBlock );
 
     ASSERT( entriesPerBlock * sizeof( uint32 ) == CHACHA_BLOCK_SIZE );  // Must fit exactly within a block
-
+    if (cx.test){
+        Log::Line( "Read FromFile F1... " );
+        auto ry = readFromFile(".phase1.f1.t1y", (char*)cx.yBuffer0, 32ull GB);
+        auto rx = readFromFile(".phase1.f1.t1y", (char*)cx.t1XBuffer, 16ull GB);
+        if (ry ==32ull GB && rx == 16ull GB)
+        {
+            Log::Line( "Read FromFile success F1... " );
+            return totalEntries;
+        }
+    }
     // Generate all of the y values to a metabuffer first
     byte*   blocks  = (byte*)cx.yBuffer0;
     uint64* yBuffer = cx.yBuffer0;
@@ -299,7 +309,10 @@ uint64 MemPhase1::GenerateF1()
         DbgWriteTableToFile( *cx.threadPool, DBG_FILE_T1_Y_PATH, totalEntries, (uint64*)yBuffer );
         DbgWriteTableToFile( *cx.threadPool, DBG_FILE_T1_X_PATH, totalEntries, xBuffer );
     #endif
-
+    if (cx.test) {
+        saveToFile(".phase1.f1.t1y", (char *) cx.yBuffer0, 32ull GB);
+        saveToFile(".phase1.f1.t1x", (char *) cx.t1XBuffer, 16ull GB);
+    }
     return totalEntries;
 }
 
@@ -365,10 +378,51 @@ uint64 MemPhase1::FpComputeSingleTable(
 {
     using TMetaIn  = typename TableMetaType<tableId>::MetaIn;
     using TMetaOut = typename TableMetaType<tableId>::MetaOut;
-
     MemPlotContext& cx  = _context;
     Log::Line( "Forward propagating to table %d...", (int)tableId+1 );
 
+    const size_t metaSizeIn  = sizeof(TMetaIn);
+    const size_t metaSizeOut = sizeof(TMetaOut);
+    std::string tableFileName = ".table"+ std::to_string((int)tableId+1);
+    std::string outFileName = tableFileName +".out";
+    std::string  yBufferFileName = tableFileName + ".bufferY";
+    std::string  metaBufferFileName = tableFileName + ".bufferMeta";
+    if (cx.test) {
+        if (FileExists(outFileName) && ((FileExists(yBufferFileName) && FileExists(metaBufferFileName)) ||  ( tableId == TableId::Table7 )))
+        {
+            uint64 pairCount = 0;
+            Log::Line("Read FromFile  %s", outFileName.c_str());
+            auto ro = readFromFile(outFileName, (char *) pairBuffer,  32ull GB);
+            if (ro > 0 )
+            {
+                if constexpr ( tableId == TableId::Table7 ) {
+                    auto ry7 = readFromFile(tableFileName + "yBuffer", (char *) cx.t7YBuffer, 16ull GB);
+                    if (ry7>0){
+                        pairCount = ro/8;
+                        ComputeSingleTableRead = 0;
+                        return pairCount;
+                    }
+                }else{
+                    pairCount = ro/8;
+                    ComputeSingleTableRead = 0;
+                    return pairCount;
+                }
+            }
+        }
+        if (ComputeSingleTableRead == 0)
+        {
+            std::string preTableFileName = ".table"+ std::to_string((int)tableId);
+            std::string  readYBufferFileName = preTableFileName + ".bufferY";
+            std::string  readMetaBufferFileName = preTableFileName + ".bufferMeta";
+            if ( FileExists(readYBufferFileName) && FileExists(readMetaBufferFileName))
+            {
+                uint64 pairCount = 0;
+                auto ry = readFromFile(readYBufferFileName, (char *) yBuffer.read,  32ull GB);
+                auto rm = readFromFile(readMetaBufferFileName, (char *) metaBuffer.read,  (4ull GB)*metaSizeIn);
+            }
+        }
+    }
+    ComputeSingleTableRead = (int)tableId+1;
     // yBuffer.read amd metaBuffer.read should always point
     // to the y and meta values generated from the previous table, respectively
     // That is the values generated from the previous' tables fx(), but sorted.
@@ -446,6 +500,9 @@ uint64 MemPhase1::FpComputeSingleTable(
             (uint64*)yBuffer.read, yBuffer.write,
             sortKeyTmp,            sortKey
         );
+        if (cx.test) {
+            saveToFile(yBufferFileName, (char *) yBuffer.write, pairCount * 8);
+        }
         yBuffer.Swap();
 
         // DbgVerifyPairsKBCGroups( pairCount, yBuffer.write, unsortedPairBuffer );
@@ -455,7 +512,9 @@ uint64 MemPhase1::FpComputeSingleTable(
             (TMetaOut*)metaBuffer.read, (TMetaOut*)metaBuffer.write,
             unsortedPairBuffer,         pairBuffer   // Write to the final pair buffer
         );
-
+        if (cx.test) {
+            saveToFile(metaBufferFileName, (char *) metaBuffer.write, pairCount * metaSizeOut);
+        }
         // DbgVerifyPairsKBCGroups( pairCount, yBuffer.write, pairBuffer );
 
         // Use the sorted metabuffer as the read buffer for the next table
@@ -487,6 +546,12 @@ uint64 MemPhase1::FpComputeSingleTable(
     else
     {
         // We don't sort table 7 just yet, so leave it as is.
+        // 我们还没有对表7进行排序，所以保持原样。
+        if (cx.test) {
+            Log::Line("write ToFile  %s", outFileName.c_str());
+            saveToFile(outFileName, (char *) pairBuffer, pairCount * 8);
+            Log::Line("write ToFile finish %s", outFileName.c_str());
+        }
     }
 
 

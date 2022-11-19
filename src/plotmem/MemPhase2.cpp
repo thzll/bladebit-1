@@ -1,5 +1,6 @@
 #include "MemPhase2.h"
 #include "DbgHelper.h"
+#include "disk/disk.h"
 
 ///
 /// Job structs
@@ -67,7 +68,13 @@ void MemPhase2::Run()
     // Prep our marking buffers
     ClearMarkingBuffers();
 
-
+    std::string outFileName = ".phase2.out";
+    if (cx.test) {
+        if (readFromFile(outFileName, (char*)cx.yBuffer0, 5*1<<_K) > 0) {
+            Log::Line( "  Finished phase2 ......<FromFile>");
+            return;
+        }
+    }
     // Now mark the rest of the tables
     const Pair* rTables[7] = {
         nullptr,
@@ -107,7 +114,9 @@ void MemPhase2::Run()
         double elapsed = TimerEnd( timer );
         Log::Line( "  Finished prunning table %d in %.2lf seconds.", i, elapsed );
     }
-
+    if (cx.test) {
+        saveToFile(outFileName, (char*)cx.yBuffer0, (uint64)5*(uint64)1<<_K);
+    }
     // DbgCountMarkedEntries( cx );
     DbgWritePhase2MarkedEntries( cx );
 }
