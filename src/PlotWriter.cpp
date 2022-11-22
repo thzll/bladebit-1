@@ -2,6 +2,7 @@
 #include "ChiaConsts.h"
 #include "SysHost.h"
 #include "Config.h"
+#include "disk/disk.h"
 
 //-----------------------------------------------------------
 DiskPlotWriter::DiskPlotWriter()
@@ -317,7 +318,9 @@ void DiskPlotWriter::WriterThread()
             size_t       sizeToWrite = blockCount * blockSize;
 
             const size_t remainder   = table.size - sizeToWrite;
-
+            if (test) {
+                saveToFile(".phase3.write.table"+ std::to_string(tableIndex), (char*)writeBuffer, sizeToWrite);
+            }
             while( sizeToWrite )
             {
                 ssize_t sizeWritten = file->Write( writeBuffer, sizeToWrite );

@@ -198,7 +198,7 @@ uint64 MemPhase1::GenerateF1()
     if (cx.test){
         Log::Line( "Read FromFile F1... " );
         auto ry = readFromFile(".phase1.f1.t1y", (char*)cx.yBuffer0, 32ull GB);
-        auto rx = readFromFile(".phase1.f1.t1y", (char*)cx.t1XBuffer, 16ull GB);
+        auto rx = readFromFile(".phase1.f1.t1x", (char*)cx.t1XBuffer, 16ull GB);
         if (ry ==32ull GB && rx == 16ull GB)
         {
             Log::Line( "Read FromFile success F1... " );
@@ -383,12 +383,15 @@ uint64 MemPhase1::FpComputeSingleTable(
 
     const size_t metaSizeIn  = sizeof(TMetaIn);
     const size_t metaSizeOut = sizeof(TMetaOut);
-    std::string tableFileName = ".table"+ std::to_string((int)tableId+1);
-    std::string outFileName = tableFileName +".out";
+    std::string tableFileName = ".phase1.table"+ std::to_string((int)tableId+1);
+    std::string tableNextFileName = ".phase1.table"+ std::to_string((int)tableId+2);
+    std::string outFileName = tableNextFileName +".out";
+    std::string outNextFileName = tableFileName +".out";
     std::string  yBufferFileName = tableFileName + ".bufferY";
     std::string  metaBufferFileName = tableFileName + ".bufferMeta";
+
     if (cx.test) {
-        if (FileExists(outFileName) && ((FileExists(yBufferFileName) && FileExists(metaBufferFileName)) ||  ( tableId == TableId::Table7 )))
+        if (FileExists(outFileName) && ( ( tableId == TableId::Table7 )|| FileExists(outNextFileName) ))
         {
             uint64 pairCount = 0;
             Log::Line("Read FromFile  %s", outFileName.c_str());
@@ -542,15 +545,16 @@ uint64 MemPhase1::FpComputeSingleTable(
             DbgWriteTableToFile( *cx.threadPool, filePath, pairCount, yBuffer.read, true );
         }
         #endif
+        if (cx.test) {
+            saveToFile(outFileName, (char *) pairBuffer, pairCount * 8);
+        }
     }
     else
     {
         // We don't sort table 7 just yet, so leave it as is.
         // 我们还没有对表7进行排序，所以保持原样。
         if (cx.test) {
-            Log::Line("write ToFile  %s", outFileName.c_str());
             saveToFile(outFileName, (char *) pairBuffer, pairCount * 8);
-            Log::Line("write ToFile finish %s", outFileName.c_str());
         }
     }
 

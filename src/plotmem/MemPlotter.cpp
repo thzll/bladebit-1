@@ -121,7 +121,7 @@ bool MemPlotter::Run( const PlotRequest& request )
     auto& cx = _context;
     cx.outPath      = request.outPath;
     cx.test = true;  //测试模式
-    cx.test = false;  //测试模式
+    //cx.test = false;  //测试模式
     // Prepare context
     cx.plotId       = request.plotId;
     cx.plotMemo     = request.memo;

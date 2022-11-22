@@ -297,7 +297,7 @@ void DbgValidateF1( DiskPlotContext& context )
 
             // Sort bucket
             RadixSort256::SortWithKey<BB_DP_MAX_JOBS>( *context.threadPool, 
-                yReader.Ptr(), tmpBuffer.Ptr(), xReader.Ptr(), tmpBuffer2.Ptr(), yBucket.Length() );
+                yReader.Ptr(), tmpBuffer.Ptr(), xReader.Ptr(), tmpBuffer2.Ptr(), yBucket.Length(), "",false );
 
             yReader = yReader.Slice( yBucket.Length() );
             xReader = xReader.Slice( xBucket.Length() );

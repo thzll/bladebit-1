@@ -41,10 +41,10 @@ size_t readFromFile(std::string fileName, char* data, size_t  size )
     ifs.open(fileName, std::ios::in | std::ios::binary);
     if (ifs.is_open()){
         ifs.read(( char*)data, size);
-        ifs.close();
         auto n = ifs.gcount();
+        ifs.close();
         if (n>0){
-            Log::Line("Read FromFile success rn:%d ..%s", n, fileName.c_str());
+            Log::Line("Read FromFile success rn:%lu ..%s", n, fileName.c_str());
         }
         return n;
       //  return size;

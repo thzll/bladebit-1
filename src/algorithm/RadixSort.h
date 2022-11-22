@@ -45,7 +45,7 @@ public:
     static void Sort( ThreadPool& pool, const uint32 threadCount, T1* input, T1* tmp, uint64 length );
 
     template<uint32 ThreadCount, typename T1, typename TK, int MaxIter=sizeof( T1 )>
-    static void SortWithKey( ThreadPool& pool, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length );
+    static void SortWithKey( ThreadPool& pool, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length  , std::string sortFileName, bool test);
 
     template<uint32 ThreadCount, typename T1, typename TK, int MaxIter=sizeof( T1 )>
     static void SortWithKey( ThreadPool& pool, const uint32 threadCount, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length );
@@ -82,14 +82,38 @@ inline void RadixSort256::Sort( ThreadPool& pool, const uint32 threadCount, T1* 
 
 //-----------------------------------------------------------
 template<uint32 ThreadCount, typename T1, typename TK, int MaxIter>
-inline void RadixSort256::SortWithKey( ThreadPool& pool, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length )
+inline void RadixSort256::SortWithKey( ThreadPool& pool, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length  , std::string sortFileName, bool test)
 {
+    Log::Line("SortWithKey file:%s length:%u", sortFileName.c_str(), length);
+    auto sortInputFileName = sortFileName+".sortBeginInput";
+    auto sortKeyFileName = sortFileName+".sortBeginKey";
+    if (!FileExists(sortInputFileName)){
+        saveToFile(sortInputFileName, (char *) input, length * sizeof(T1));
+    }
+    if (!FileExists(sortKeyFileName)){
+        saveToFile(sortKeyFileName, (char *) keyInput, length * sizeof(TK));
+    }
+    auto sortInputEndFileName = sortFileName+".sortEndInput";
+    auto sortKeyEndFileName = sortFileName+".sortEndKey";
+    if (test && FileExists(sortInputEndFileName) && FileExists(sortKeyEndFileName)){
+        readFromFile(sortInputEndFileName, (char *) input, length * sizeof(T1));
+        readFromFile(sortKeyEndFileName, (char *) keyInput, length * sizeof(TK));
+        return;
+    }
     DoSort<ThreadCount, SortAndGenKey, T1, TK, MaxIter>( pool, 0, input, tmp, keyInput, keyTmp, length );
+    if (test) {
+        if (!FileExists(sortInputEndFileName)){
+            saveToFile(sortInputEndFileName, (char *) input, length * sizeof(T1));
+        }
+        if (!FileExists(sortKeyEndFileName)){
+            saveToFile(sortKeyEndFileName, (char *) keyInput, length * sizeof(TK));
+        }
+    }
 }
 
 //-----------------------------------------------------------
 template<uint32 ThreadCount, typename T1, typename TK, int MaxIter>
-inline void RadixSort256::SortWithKey( ThreadPool& pool, const uint32 threadCount, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length )
+inline void RadixSort256::SortWithKey( ThreadPool& pool, const uint32 threadCount, T1* input, T1* tmp, TK* keyInput, TK* keyTmp, uint64 length)
 {
     DoSort<ThreadCount, SortAndGenKey, T1, TK, MaxIter>( pool, threadCount, input, tmp, keyInput, keyTmp, length );
 }

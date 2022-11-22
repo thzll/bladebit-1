@@ -65,10 +65,12 @@ void MemPhase3::Run()
 //-----------------------------------------------------------
 template<bool IsTable6>
 uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable,
-                                const uint64 rTableCount, const byte* markedEntries, TableId tableId )
+                                 uint64 rTableCount, const byte* markedEntries, TableId tableId )
 {
     auto& cx = _context;
-
+    if (rTableCount==0){
+        rTableCount = 0x100000000;
+    }
     const uint   threadCount      = cx.threadCount;
     const uint64 entriesPerThread = rTableCount / threadCount;
     const uint64 trailingEntries  = rTableCount - ( entriesPerThread * threadCount );
@@ -78,6 +80,8 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
         // ConverToLinePointThread reads fron lpBuffer,
         // but since we haven't pruned rTable and moved it to lpBuffer,
         // we need to swap it here, so that we read/write from/to it in ConverToLinePointThread
+        // 但由于我们没有修剪rTable并将其移动到lpBuffer，
+        // 我们需要在这里交换它，以便在ConverToLinePointThread中读/写它
         uint64* tmp = (uint64*)rTable;
         rTable   = (Pair*)lpBuffer;
         lpBuffer = tmp;
@@ -156,16 +160,19 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
         }
     }
     // Sort LinePoints, along with the map
+    // 对LinePoints和地图进行排序
     RadixSort256::SortWithKey<MAX_THREADS>( *cx.threadPool,
         lpBuffer, (uint64*)rTable,
         map,      map + newLength,  // This is meta1, so there's plenty of space to hold both buffers
-        newLength );
+        newLength, sortFileName, cx.test );
     if (cx.test) {
         saveToFile(sortFileName + ".EndLpBuffer", (char *) lpBuffer, newLength * sizeof(uint64));
     }
 
     // Write lookup table (map it based on sort key)
     // After this step lEntries will contain the new index map into the LP's
+    // 写入查找表（根据排序键映射）
+    // 在此步骤之后，lEntries将包含LP的新索引映射
     cx.threadPool->RunJob( WriteLookupTableThread, jobs, threadCount );
     if (cx.test) {
         saveToFile(sortFileName + ".lEntries", (char *) lEntries, rTableCount * 4);
@@ -178,10 +185,11 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
 
         // We need to sort on f7 now, with lEntries with
         // contain now the index into table 6's LinePoints
+        // 我们现在需要对f7进行排序，其中lEntries现在包含表6的LinePoints的索引
         RadixSort256::SortWithKey<MAX_THREADS>( *cx.threadPool,
             cx.t7YBuffer, t7SortTmp,
             lEntries,     lEntriesSortTmp,
-            newLength );
+            newLength, sortFileName +"_32", cx.test  );
 
         cx.entryCount[(uint)TableId::Table7] = newLength;
     }
@@ -196,12 +204,23 @@ uint64 MemPhase3::ProcessTable( uint32* lEntries, uint64* lpBuffer, Pair* rTable
 
     // Write park for table (re-use rTable for it)
     // #NOTE: For table 6: rTable is meta0 here.
+    // 为表写入park（重新使用rTable）
+    // #注意：对于表6:rTable在这里是meta0。
+    std::string parkBufferFile = sortFileName + ".parkBuffer";
+    size_t sizeTableParks = 0;
     byte*  parkBuffer     = _context.plotWriter->AlignPointerToBlockSize<byte>( (void*)rTable );
-    size_t sizeTableParks = WriteParks<MAX_THREADS>( *cx.threadPool, newLength, lpBuffer, parkBuffer, tableId );
-    if (cx.test) {
-        saveToFile(sortFileName + ".parkBuffer", (char *) parkBuffer, sizeTableParks);
+    if (cx.test && FileExists(parkBufferFile)) {
+        auto rn = readFromFile(parkBufferFile, (char*)parkBuffer,newLength);
+        sizeTableParks = uint64(rn);
+    } else {
+        sizeTableParks = WriteParks<MAX_THREADS>( *cx.threadPool, newLength, lpBuffer, parkBuffer, tableId );
+        if (cx.test) {
+            saveToFile(sortFileName + ".parkBuffer", (char *) parkBuffer, sizeTableParks);
+        }
     }
     // Send over the park for writing in the plot file in the background
+    // 发送到公园，以便在后台写入绘图文件
+    cx.plotWriter->test = cx.test;
     if( !cx.plotWriter->WriteTable( parkBuffer, sizeTableParks ) )
         Fatal( "Failed to write table %d to disk.", (int)tableId+1 );
 

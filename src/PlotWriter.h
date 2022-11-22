@@ -31,6 +31,7 @@
 class DiskPlotWriter
 {
 public:
+    bool              test;
     DiskPlotWriter();
     ~DiskPlotWriter();
 
@@ -98,7 +99,6 @@ private:
                                                     //  no tables pending to write.
 
     int               _error              = 0;      // Set if there was an error writing the plot file
-
     Thread            _writerThread;
     Semaphore         _writeSignal;                 // Main thread signals writer thread to write a new table
     Semaphore         _plotFinishedSignal;          // Writer thread signals that it's finished writing a plot

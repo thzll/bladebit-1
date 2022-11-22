@@ -13,7 +13,7 @@ public:
 private:
     template<bool IsTable6>
     uint64 ProcessTable( uint32* lEntries, uint64* lpBuffer,
-                         Pair* rTable, const uint64 rTableCount, 
+                         Pair* rTable,  uint64 rTableCount,
                          const byte* markedEntries, TableId tableId );
 
 private:
